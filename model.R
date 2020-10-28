@@ -144,11 +144,11 @@ for(g in 1:29){
     wrf.fit<-variofit(vg.wrf,kappa=0.5,fix.kappa = T)
     rho.wrf<-wrf.fit$cov.pars[2]
     
-    ob<-m.row[,1:4745]
-    sim<-cord.row[,1:4745]
+    ob<-lam.m[,1:4745]
+    sim<-lam.cord[,1:4745]
     
-    mu<-rowMeans(m.row[,1:4745])
-    wmu<-rowMeans(cord.row[,1:4745])
+    mu<-rowMeans(lam.m[,1:4745])
+    wmu<-rowMeans(lam.cord[,1:4745])
     
     cov.mat<-matrix(0,nrow=614,ncol=614)
     cov.wrf.mat<-matrix(0,nrow=614,ncol=614)
@@ -162,8 +162,16 @@ for(g in 1:29){
     o<-chol(cov.mat)
     
     sigma<-o%*%w
-    correct<-sigma%*%(cord.row[,4746:9490]-wmu)
+    correct<-sigma%*%(lam.cord[,4746:9490]-wmu)
     p.row<-mu+correct
+    
+    m.func<-function(x){
+      y<-ifelse(x>=0,((x+1)^lambda[g]-1)/lambda[g],-((-x+1)^(2-lambda[g])-1)/(2-lambda[g]))
+      return(y)
+    }
+    m.inv<-inverse(m.func)
+    for(r in 1:614){
+      p.row[r,]<-m.inv(p.row[r,])
     
     k<-KL.dist(t(p.row),t(m.row[,4746:9490]),k=70)
     kld.lamb<-c(kld.lamb,k[70])
@@ -227,7 +235,17 @@ for(c in c(1:20)){
       sigma<-o%*%w
       correct<-sigma%*%(lam.wrf[,4746:9490]-wmu)
       p<-mu+correct
-      k<-KL.dist(t(p),t(lam.m[,4746:9490]),k=70)
+      
+      m.func<-function(x){
+        y<-ifelse(x>=0,((x+1)^lambda[g]-1)/lambda[g],-((-x+1)^(2-lambda[g])-1)/(2-lambda[g]))
+        return(y)
+      }
+      m.inv<-inverse(m.func)
+      for(r in 1:614){
+        p[r,]<-m.inv(p[r,])
+      }
+      
+      k<-KL.dist(t(p),t(m.row[,4746:9490]),k=70)
       kldwf<-c(kldwf,k[70])
       
     }
@@ -241,32 +259,15 @@ for(c in c(1:20)){
 
 
 #nonstationary matern
-covmat<-array(0,c(614,614,4745))
-for(i in 1:4745){
-  fit<-NSconvo_fit(coords = cbind(loc,lac),data=m.row[,i] ,fit.radius = 5, N.mc = 4)
-  covmat[,,i]<-fit$Cov.mat
-}
 
-cordmat<-array(0,c(614,614,4745))
-for(i in 1:4745){
-  fit<-NSconvo_fit(coords = cbind(loc,lac),data=cord.row[,i] ,fit.radius = 5, N.mc = 4)
-  cordmat[,,i]<-fit$Cov.mat
-}
-
-mean.cov<-matrix(0,nrow=614,ncol=614)
-for(i in 1:614){
-  for(j in 1:614){
-    mean.cov[i,j]<-mean(covmat[i,j,])
-  }
-}
+fit<-NSconvo_fit(coords = cbind(loc,lac),data=m.row ,fit.radius = 5, N.mc = 4)
+covmat<-fit$Cov.mat
 
 
-mean.cord<-matrix(0,nrow=614,ncol=614)
-for(i in 1:614){
-  for(j in 1:614){
-    mean.cord[i,j]<-mean(cordmat[i,j,])
-  }
-}
+
+fit<-NSconvo_fit(coords = cbind(loc,lac),data=cord.row ,fit.radius = 5, N.mc = 4)
+cordmat<-fit$Cov.mat
+
 
 
 ob<-m.row[,1:4745]
@@ -276,8 +277,8 @@ mu<-rowMeans(m.row[,1:4745])
 wmu<-rowMeans(cord.row[,1:4745])
 
 
-w<-solve(chol(mean.cord))
-o<-chol(mean.cov)
+w<-solve(chol(cordmat))
+o<-chol(covmat)
 sigma<-o%*%w
 correct<-sigma%*%(cord.row[,4746:9490]-wmu)
 p.row<-mu+correct
@@ -285,40 +286,27 @@ p.row<-mu+correct
 
 KL.dist(t(p.row),t(m.row[,4746:9490]),k=70)
 
-#nonstationary one pparameter trasfoamtion
+#nonstationary one parameter trasfoamtion
 kld.lamb<-c()  
 for(g in 1:29){
   lam.m<-matrix(0,nrow=614,ncol=9490)
   for(i in 1:614){
     lam.m[i,]<-ifelse(m.row[i,]>=0,((m.row[i,]+1)^lambda[g]-1)/lambda[g],-((-m.row[i,]+1)^(2-lambda[g])-1)/(2-lambda[g]))
   }
-  covmat<-array(0,c(614,614,4745))
-  for(i in 1:4745){
-    fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.m[,i] ,fit.radius = 5, N.mc = 4)
-    covmat[,,i]<-fit$Cov.mat
-  }
-  mean.cov<-matrix(0,nrow=614,ncol=614)
-  for(i in 1:614){
-    for(j in 1:614){
-      mean.cov[i,j]<-mean(covmat[i,j,])
-    }
-  }
+
+  fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.m ,fit.radius = 5, N.mc = 4)
+  covmat<-fit$Cov.mat
+  
   for(gw in 1:29){
     lam.cord<-matrix(0,nrow=614,ncol=9490)
     for(i in 1:614){
       lam.cord[i,]<-ifelse(cord.row[i,]>=0,((cord.row[i,]+1)^lambda[gw]-1)/lambda[gw],-((-cord.row[i,]+1)^(2-lambda[gw])-1)/(2-lambda[gw]))
     }  
-    cordmat<-array(0,c(614,614,4745))
-    for(i in 1:4745){
-      fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.cord[,i] ,fit.radius = 5, N.mc = 4)
-      cordmat[,,i]<-fit$Cov.mat
-    }
-    mean.cord<-matrix(0,nrow=614,ncol=614)
-    for(i in 1:614){
-      for(j in 1:614){
-        mean.cord[i,j]<-mean(cordmat[i,j,])
-      }
-    }
+  
+    fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.cord ,fit.radius = 5, N.mc = 4)
+    cordmat<-fit$Cov.mat
+    
+
     
     ob<-lam.m[,1:4745]
     sim<-lam.cord[,1:4745]
@@ -326,22 +314,23 @@ for(g in 1:29){
     mu<-rowMeans(lam.m[,1:4745])
     wmu<-rowMeans(lam.cord[,1:4745])
     
-    cov.mat<-matrix(0,nrow=614,ncol=614)
-    cov.wrf.mat<-matrix(0,nrow=614,ncol=614)
-    for(n in 1:614){
-      d<-sqrt((lac-lac[n])^2+(loc-loc[n])^2)
-      cov.mat[,n]<-matern(d, rho, 0.5)
-      cov.wrf.mat[,n]<-matern(d,rho.wrf,0.5)
-    }
-    
-    w<-solve(chol(cov.wrf.mat))
-    o<-chol(cov.mat)
+    w<-solve(chol(cordmat))
+    o<-chol(covmat)
     
     sigma<-o%*%w
     correct<-sigma%*%(cord.row[,4746:9490]-wmu)
     p.row<-mu+correct
     
-    k<-KL.dist(t(p.row),t(lam.m[,4746:9490]),k=70)
+    m.func<-function(x){
+      y<-ifelse(x>=0,((x+1)^lambda[g]-1)/lambda[g],-((-x+1)^(2-lambda[g])-1)/(2-lambda[g]))
+      return(y)
+    }
+    m.inv<-inverse(m.func)
+    for(r in 1:614){
+      p.row[r,]<-m.inv(p.row[r,])
+    }
+    
+    k<-KL.dist(t(p.row),t(m.row[,4746:9490]),k=70)
     kld.lamb<-c(kld.lamb,k[70])
     
   }
@@ -370,11 +359,10 @@ for(c in c(1:20)){
     for(i in 1:mr){
       lam.m[i,]<-ifelse(m.mat[i,]>=0,((m.mat[i,]+1)^lambda[g]-1)/lambda[g],-((-m.mat[i,]+1)^(2-lambda[g])-1)/(2-lambda[g]))
     }
-    covmat<-array(0,c(614,614,4745))
-    for(i in 1:4745){
-      fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.m[,i] ,fit.radius = 5, N.mc = 4)
-      covmat[,,i]<-fit$Cov.mat
-    }
+  
+    fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.m ,fit.radius = 5, N.mc = 4)
+    covmat<-fit$Cov.mat
+    
     mean.cov<-matrix(0,nrow=614,ncol=614)
     for(i in 1:614){
       for(j in 1:614){
@@ -386,17 +374,11 @@ for(c in c(1:20)){
       for(j in 1:mr){
         lam.wrf[j,]<-ifelse(wrf.mat[j,]>=0,((wrf.mat[j,]+1)^lambda[gw]-1)/lambda[gw],-((-wrf.mat[j,]+1)^(2-lambda[gw])-1)/(2-lambda[gw]))
       }  
-      cordmat<-array(0,c(614,614,4745))
-      for(i in 1:4745){
-        fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.cord[,i] ,fit.radius = 5, N.mc = 4)
-        cordmat[,,i]<-fit$Cov.mat
-      }
-      mean.cord<-matrix(0,nrow=614,ncol=614)
-      for(i in 1:614){
-        for(j in 1:614){
-          mean.cord[i,j]<-mean(cordmat[i,j,])
-        }
-      }
+     
+      fit<-NSconvo_fit(coords = cbind(loc,lac),data=lam.cord ,fit.radius = 5, N.mc = 4)
+      cordmat[,,i]<-fit$Cov.mat
+     
+   
       
       ob<-lam.m[,1:4745]
       sim<-lam.cord[,1:4745]
@@ -404,21 +386,24 @@ for(c in c(1:20)){
       mu<-rowMeans(lam.m[,1:4745])
       wmu<-rowMeans(lam.cord[,1:4745])
       
-      cov.mat<-matrix(0,nrow=614,ncol=614)
-      cov.wrf.mat<-matrix(0,nrow=614,ncol=614)
-      for(n in 1:614){
-        d<-sqrt((lac-lac[n])^2+(loc-loc[n])^2)
-        cov.mat[,n]<-matern(d, rho, 0.5)
-        cov.wrf.mat[,n]<-matern(d,rho.wrf,0.5)
-      }
-      
-      w<-solve(chol(cov.wrf.mat))
-      o<-chol(cov.mat)
+
+      w<-solve(chol(cordmat))
+      o<-chol(covmat)
       
       sigma<-o%*%w
       correct<-sigma%*%(lam.wrf[,4746:9490]-wmu)
       p<-mu+correct
-      k<-KL.dist(t(p),t(lam.m[,4746:9490]),k=70)
+      
+      m.func<-function(x){
+        y<-ifelse(x>=0,((x+1)^lambda[g]-1)/lambda[g],-((-x+1)^(2-lambda[g])-1)/(2-lambda[g]))
+        return(y)
+      }
+      m.inv<-inverse(m.func)
+      for(r in 1:614){
+        p[r,]<-m.inv(p[r,])
+      }
+      
+      k<-KL.dist(t(p),t(m.row[,4746:9490]),k=70)
       kldwf<-c(kldwf,k[70])
       
     }
@@ -443,34 +428,15 @@ for(i in 1:20){
     }
 }
 
-yjcov.m<-array(0,c(614,614,20))
-for(i in 1:20){
-  fit<-NSconvo_fit(coords = cbind(loc,lac),data=yj.m[,i] ,fit.radius = 5, N.mc = 4)
-  yjcov.m[,,i]<-fit$Cov.mat
-}
 
-yjcov.cord<-array(0,c(614,614,20))
-for(i in 1:20){
-  fit<-NSconvo_fit(coords = cbind(loc,lac),data=yj.cord[,i] ,fit.radius = 5, N.mc = 4)
-  yjcov.cord[,,i]<-fit$Cov.mat
-}
+fit<-NSconvo_fit(coords = cbind(loc,lac),data=yj.m ,fit.radius = 5, N.mc = 4)
+yjcov.m<-fit$Cov.mat
 
 
 
-mean.yjm<-matrix(0,nrow=614,ncol=614)
-for(i in 1:614){
-  for(j in 1:614){
-    mean.yjm[i,j]<-mean(yjcov.m[i,j,])
-  }
-}
+fit<-NSconvo_fit(coords = cbind(loc,lac),data=yj.cord ,fit.radius = 5, N.mc = 4)
+yjcov.cord<-fit$Cov.mat
 
-
-mean.yjc<-matrix(0,nrow=614,ncol=614)
-for(i in 1:614){
-  for(j in 1:614){
-    mean.yjc[i,j]<-mean(yjcov.cord[i,j,])
-  }
-}
 
 
 ob<-yj.m[,1:4745]
@@ -480,11 +446,23 @@ mu<-rowMeans(yj.m[,1:4745])
 wmu<-rowMeans(yj.cord[,1:4745])
 
 
-w<-solve(chol(mean.yjc))
-o<-chol(mean.yjm)
+w<-solve(chol(yjcov.cord))
+o<-chol(yjcov.m)
 sigma<-o%*%w
 correct<-sigma%*%(yj.cord[,4746:9490]-wmu)
 p.row<-mu+correct
 
-
-KL.dist(t(p.row),t(yj.m[,4746:9490]),k=70)
+pred<-c()
+for(c in 1:20){
+  m.func<-function(x){
+    y<-ifelse(x>=0,((x+1)^gam.m[c]-1)/gam.m[c],-((-x+1)^(2-gam.m[c])-1)/(2-gam.m[c]))
+    return(y)
+  }
+  m.inv<-inverse(m.func)
+  mat<-p.row[m.k==c,]
+  nr<-dim(mat)[1]
+  for(i in 1:nr){
+    pred<-rbind(pred,m.inv(mat[nr,]))
+  }
+}
+KL.dist(t(pred),t(m.row[,4746:9490]),k=70)
